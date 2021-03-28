@@ -1,0 +1,490 @@
+	..........................................................................
+SHS (Smart Home System)
+
+
+	States :-
+		SS_PW_CHECK,
+		SS_LOCK_STUCK,
+		SS_MAIN,
+		SS_LIGHT_CONFIG,
+		SS_ACTEMP_CONFIG,
+		SS_LCOK_CONFIG,
+		SS_ALARM
+
+
+	System parameters :12
+		PW,
+		NewPWLength,
+		digitvalue,
+		digitcounter,
+		Ctemp,
+		ACTemp
+		Fspeed,
+		Alarm_Status,
+		Light_Intensity,
+		Ldr_Intensity,
+		Light_Mode,
+		SysState,
+		
+	System Events: 22
+		E_CHECK_PW_SCREEN
+		E_WRONG_PW_SCREEN
+		E_DOOR_LOCKED_SCREEN
+		E_MAIN_SCREEN
+		E_LIGHT_CONFIG_SCREEN
+		E_ACTEMP_CONFIG_SCREEN
+		E_LCOK_CONFIG_SCREEN
+		E_ALARM_SCREEN
+		E_INSERT_DIGIT_DISP
+		E_LIGHT_MODE_UPDATE
+		E_LIGHT_INTENSITY_UPDATE
+		E_CTEMP_UPDATE
+		E_ACTEMP_UPDATE
+		E_ALARM_STATUS UPDATE
+		E_PW_UPDATE
+		E_PW_CHECK
+		E_ALARM
+		E_STARTFAN
+		E_STARTHEATER
+		E_ADJUSTLIHTING
+		E_LOCK_STATE
+		E_RESET_SYSTEM
+
+
+
+		
+			
+
+----------------------------------------------------------------------------------------------
+PESUEDO CODE:-
+	T_Alarm_Appliance:
+	wait for egEvents(E_ALARM|E_STARTFAN|E_STARTWORMER|E_ADJUSTLIHTING|E_OPENDOOR)
+	if(E_ALARM)
+      Set on LEDs and BUZZERs
+	  OSDelay(500)
+	  Set off LEDs and BUZZERs
+	  OSDelay(500)
+	  
+    if (E_STARTFAN)
+		set on fan if closed 
+	if (E_STARTWORMER)
+		SET ON LED if closed 
+	if(E_ADJUSTLIHTING)
+	Map Light_Intensity percentage  (switch) then set on number of leds according to it
+		
+	if(E_OPENDOOR)
+	set on Relay
+		
+   end
+		
+
+	T_SysManagment:-
+	  u8 newPW[5] ,oldPW[5];
+	   Wait for bsCheck
+	   if taken
+					/* enviro*/
+				if(SHS->System_State==SS_MAIN && SHS->	CTemp< SHS-> ACTemp )
+					clear egEvents(E_STARTWORMER)
+					set egEvents(E_STARTFAN)
+				if (SHS->System_State==SS_MAIN && SHS->CTemp> SHS-> ACTemp)
+					clear egEvents(E_STARTFAN)
+					SET egEvents(E_STARTWORMER)
+				if (SHS->System_State==SS_MAIN && SHS->CTemp== SHS-> ACTemp)
+					clear egEvents(E_STARTFAN)
+					clear egEvents(E_STARTWORMER)
+					
+					/*Temp*/
+				if( SHS->System_State==SS_MAIN &&TAS.AlarmStatus == 'E' && SHS->CTemp>100)
+					//UART_SendString("Emergency")//
+					SHS->System_State=SS_ALARM
+					set egEvents(E_ALARM_SCREEN|E_ALARM)
+				else if(TAS.SysState == SS_ALARM && (TAS.AlarmStatus == 'D' || TAS.CTemp < TAS.TTemp)){
+					set egEvents(egEvents,(E_ALARM));
+					 SHS->system_states= SS_MAIN;
+				
+					/*Light*/
+				if(SHS->System_State==SS_MAIN && E_LIGHTINT_UPDATE  )
+					set egEvents(E_ADJUSTLIHTING) //RE
+				
+					
+				/*userterminal*/
+				
+				if()
+	   
+	   
+	   end
+	
+
+	T_EnviroInterface:		
+		creat temp Variable 	 
+		creat Ratio Variable 
+		
+		Read Temp from the Temp sensor 
+		Read Ratio from LDR Sernsor /*    0-100%*/		t
+		
+		if (Temp != CTemp && SysState == (SS_ALARM|SS_MAIN))
+			update the CTemp in the system structure
+			set egEvents(E_CTEMP_UPDATE)
+			Give bsCheck
+		end
+		if (Ratio != LDR_Intensity && SysState ==(SS_MAIN)&& Light_Status== 'A')
+			update the Ratio in the system structure
+			set egEvents(E_LIGHTINT_UPDATE)
+			Give bsCheck
+		end
+		OSDelay(100)
+		
+		
+		
+
+
+T_User_Input:
+u8 disp_temp;
+u8 keypad_buf[5];
+u8 uart_buf[20];
+{
+	char uart_ch,keypad_ch,light_temp=0,AC_temp=0;
+	while(1)
+	{
+		uart_ch=uart_receive_periodic();
+		keypad_ch=keypad_getKey();
+		
+		if (uart_ch!=0)
+		{
+			switch (SH.SysState)
+			{
+				case SS_PW_CHECK:
+				case SS_LOCK_CONFIG:
+				
+					if (uart_ch>='0' && uart_ch<='9' && digitcounter<4)
+					{
+						store data in uart_buf in index [password_digit];
+						SH.digitcounter++;
+						raise event (E_INSERT_DIGIT_DISP);
+						SET bsCheck
+					}
+					
+					if (password_digit==4)
+					{
+						SH.digitcounter=0;
+						set event (pw_check);
+					}
+				break;
+
+
+				case SS_MAIN,:
+					if 		(uart_ch=='1')				
+					
+						SH.digitcounter=0;
+						SH.SysState= SS_LIGHT_CONFIG;
+						set event (E_LIGHT_CONFIG_SCREEN);
+					}
+					
+					else if (uart_ch=='2')
+					
+						SH.digitcounter=0;
+						SH.SysState= SS_ACTEMP_CONFIG;
+						set event (E_ACTEMP_CONFIG_SCREEN);
+					}
+					else if (uart_ch=='3')
+					{
+						SH.digitcounter=0;	
+						SH.SysState= SS_LOCK_CONFIG;
+						set event (E_LOCK_CONFIG_SCREEN);
+					}
+					else if (uart_ch=='4')
+					{
+						if(SH.Alarm_Status=='E')		SH.Alarm_Status='D';
+						else							SH.Alarm_Status='E';
+						SH.digitcounter=0;
+						set event(E_ALARM_STATUS UPDATE);
+						set semaphore bsCheck;
+					}
+					
+					else if (uart_ch=='5')
+					{
+						if(SH.Light_Mode=='A')			SH.Alarm_Status='M';
+						else							SH.Alarm_Status='A';
+						SH.digitcounter=0;
+						set event(E_LIGHT_MODE_UPDATE);
+						set semaphore bsCheck;					}
+					}
+					 else if (uart_ch == '#')
+					{
+						set event(set WD timer);
+						_vTaskdelay(10000000);
+					}
+				break;
+				
+
+				case SS_LIGHT_CONFIG:
+					if (SH.digitcounter<2 &&(uart_ch>='0' && uart_ch<='9'))
+					{
+						light_temp=(light_temp * 10) + (uart_ch - '0');
+						disp_temp=uart_ch;
+						set event (E_INSERT_DIGIT_DISP);
+					}
+					
+					else if(uart_ch=='O')
+					{
+						HS.Light_Intensity=light_temp;
+						light_temp=0;
+						SH.digitcounter=0;
+						SH.SystemState (SS_main);
+						set_event (E_MAIN_SCREEN | E_LIGHT_MODE_UPDATE | E_LIGHT_INTENSITY_UPDATE | E_CTEMP_UPDATE | E_ACTEMP_UPDATE | E_ALARM_STATUS UPDATE)
+						give semaphore bsCheck
+					}
+					else if (uart_ch=='C')
+					{
+						light_temp=0;
+						SH.digitcounter=0;
+						SH.SystemState (SS_main);
+						set_event (E_MAIN_SCREEN | E_LIGHT_MODE_UPDATE | E_LIGHT_INTENSITY_UPDATE | E_CTEMP_UPDATE | E_ACTEMP_UPDATE | E_ALARM_STATUS UPDATE)
+						give semaphore bsCheck
+					}
+				break;
+				
+				
+				case SS_ACTEMP_CONFIG:
+					if (SH.digitcounter<2 &&(uart_ch>='0' && uart_ch<='9'))
+					{
+						AC_temp=(AC_temp * 10) + (uart_ch - '0');
+						disp_temp=uart_ch;
+						set event (E_INSERT_DIGIT_DISP);
+					}
+					
+					else if(uart_ch=='O')
+					{
+						HS.ACTemp=light_temp;
+						AC_temp=0;
+						SH.digitcounter=0;
+						SH.SystemState (SS_main);
+						set_event (E_MAIN_SCREEN | E_LIGHT_MODE_UPDATE | E_LIGHT_INTENSITY_UPDATE | E_CTEMP_UPDATE | E_ACTEMP_UPDATE | E_ALARM_STATUS UPDATE)
+						give semaphore bsCheck
+					}
+					else if (uart_ch=='C')
+					{
+						AC_temp=0;
+						SH.digitcounter=0;
+						SH.SystemState (SS_main);
+						set_event (E_MAIN_SCREEN | E_LIGHT_MODE_UPDATE | E_LIGHT_INTENSITY_UPDATE | E_CTEMP_UPDATE | E_ACTEMP_UPDATE | E_ALARM_STATUS UPDATE)
+						give semaphore bsCheck
+					}
+				break;
+				
+				
+				case SS_ALARM:
+					if (uart_ch=='C')
+					{
+						SH.SystemState=main;
+						CLEAR E_ALARM
+						set_event (E_MAIN_SCREEN | E_LIGHT_MODE_UPDATE | E_LIGHT_INTENSITY_UPDATE | E_CTEMP_UPDATE | E_ACTEMP_UPDATE | E_ALARM_STATUS UPDATE)
+						give semaphore bsCheck;
+					}
+				break;
+			}
+		}
+				
+		
+		
+		
+		if (keypad_ch!=DEFAULT_KEY)
+		{
+			switch (SH.SysState)
+			{
+				case SS_PW_CHECK:
+				//case SS_PW_MISS:
+				case SS_LOCK_CONFIG:
+				
+					if (keypad_ch>='0' && keypad_ch<='9')
+					{
+						store data in keypad_buf in index [password_digit];
+						SH.digitcounter++;
+						raise event (E_INSERT_DIGIT_DISP);
+					}
+					else if (SH.SystemState==SS_LOCK_CONFIG && keypad_ch == '#')
+					{
+						set event(set WD timer);
+						_vTaskdelay(100);
+					}
+					
+					if (password_digit==4)
+					{
+						SH.digitcounter=0;
+						set event (pw_check);
+					}
+				break;
+
+
+				case SS_MAIN,:
+					if 		(keypad_ch=='1')				
+					
+						SH.digitcounter=0;
+						SH.SysState= SS_LIGHT_CONFIG;
+						set event (E_LIGHT_CONFIG_SCREEN);
+					}
+					
+					else if (keypad_ch=='2')
+					
+						SH.digitcounter=0;
+						SH.SysState= SS_ACTEMP_CONFIG;
+						set event (E_ACTEMP_CONFIG_SCREEN);
+					}
+					else if (keypad_ch=='3')
+					{
+						SH.digitcounter=0;	
+						SH.SysState= SS_LOCK_CONFIG;
+						set event (E_LOCK_CONFIG_SCREEN);
+					}
+					else if (keypad_ch=='4')
+					{
+						if(SH.Alarm_Status=='E')		SH.Alarm_Status='D';
+						else							SH.Alarm_Status='E';
+						SH.digitcounter=0;
+						set event(E_ALARM_STATUS UPDATE);
+						set semaphore bsCheck;
+					}
+					
+					else if (keypad_ch=='5')
+					{
+						if(SH.Light_Mode=='A')			SH.Alarm_Status='M';
+						else							SH.Alarm_Status='A';
+						SH.digitcounter=0;
+						set event(E_LIGHT_MODE_UPDATE);
+						set semaphore bsCheck;					}
+					}
+				break;
+				
+
+				case SS_LIGHT_CONFIG:
+					if (SH.digitcounter<2 &&(keypad_ch>='0' && keypad_ch<='9'))
+					{
+						light_temp=(light_temp * 10) + (keypad_ch - '0');
+						disp_temp=keypad_ch;
+						set event (E_INSERT_DIGIT_DISP);
+					}
+					
+					else if(keypad_ch=='+')
+					{
+						HS.Light_Intensity=light_temp;
+						light_temp=0;
+						SH.digitcounter=0;
+						SH.SystemState (SS_main);
+						set_event (E_MAIN_SCREEN | E_LIGHT_MODE_UPDATE | E_LIGHT_INTENSITY_UPDATE | E_CTEMP_UPDATE | E_ACTEMP_UPDATE | E_ALARM_STATUS UPDATE)
+						give semaphore bsCheck
+					}
+					else if (keypad_ch=='-')
+					{
+						light_temp=0;
+						SH.digitcounter=0;
+						SH.SystemState (SS_main);
+						set_event (E_MAIN_SCREEN | E_LIGHT_MODE_UPDATE | E_LIGHT_INTENSITY_UPDATE | E_CTEMP_UPDATE | E_ACTEMP_UPDATE | E_ALARM_STATUS UPDATE)
+						give semaphore bsCheck
+					}
+				break;
+				
+				
+				case SS_ACTEMP_CONFIG:
+					if (SH.digitcounter<2 &&(keypad_ch>='0' && keypad_ch<='9'))
+					{
+						AC_temp=(AC_temp * 10) + (keypad_ch - '0');
+						disp_temp=keypad_ch;
+						set event (E_INSERT_DIGIT_DISP);
+					}
+					
+					else if(keypad_ch=='+')
+					{
+						HS.ACTemp=light_temp;
+						AC_temp=0;
+						SH.digitcounter=0;
+						SH.SystemState (SS_main);
+						set_event (E_MAIN_SCREEN | E_LIGHT_MODE_UPDATE | E_LIGHT_INTENSITY_UPDATE | E_CTEMP_UPDATE | E_ACTEMP_UPDATE | E_ALARM_STATUS UPDATE)
+						give semaphore bsCheck
+					}
+					else if (keypad_ch=='-')
+					{
+						AC_temp=0;
+						SH.digitcounter=0;
+						SH.SystemState (SS_main);
+						set_event (E_MAIN_SCREEN | E_LIGHT_MODE_UPDATE | E_LIGHT_INTENSITY_UPDATE | E_CTEMP_UPDATE | E_ACTEMP_UPDATE | E_ALARM_STATUS UPDATE)
+						give semaphore bsCheck
+					}
+				break;
+				
+				
+				case SS_ALARM:
+					if (keypad_ch=='-')
+					{
+						SH.SystemState=main;
+						set_event (E_MAIN_SCREEN | E_LIGHT_MODE_UPDATE | E_LIGHT_INTENSITY_UPDATE | E_CTEMP_UPDATE | E_ACTEMP_UPDATE | E_ALARM_STATUS UPDATE)
+						give semaphore bsCheck;
+					}
+				break;
+			}
+		}
+	
+		_vTaskdelay(100);	
+	}
+}
+
+
+ T_DisplayManagment:
+   create return eg var
+   wiat for all Display Events 
+   if any  taken 
+   
+   if(ebBits&E_CHECK_PW_SCREEN){
+			SHApp_DispScreen(SS_PW_CHECK);
+		}
+	if(ebBits&E_WRONG_PW_SCREEN){
+			SHApp_DispScreen(SS_PW_MISS);
+		}
+	if(ebBits&E_DOOR_LOCKED_SCREEN){
+			SHApp_DispScreen(SS_LOCK_STUCK);
+		}
+	if(ebBits&E_MAIN_SCREEN){
+			SHApp_DispScreen(SS_MAIN);
+		}
+	if(ebBits&E_LIGHT_CONFIG_SCREEN){
+			SHApp_DispScreen(SS_LIGHT_CONFIG);
+		}
+	if(ebBits&E_ACTEMP_CONFIG_SCREEN){
+			SHApp_DispScreen(SS_ACTEMP_CONFIG);
+		}
+	if(ebBits&E_LCOK_CONFIG_SCREEN){
+			SHApp_DispScreen(SS_LCOK_CONFIG);
+		}
+	if(ebBits&E_ALARM_SCREEN){
+			SHApp_DispScreen(SS_ALARM);
+		}
+	if(ebBits&E_LIGHT_MODE_UPDATE){
+			LCD_WritecharXY(DISP_LIGHT_MODE_L,DISP_LIGHT_MODE_C,SHApp.Light_Mode);
+		}
+	if(ebBits&E_LIGHT_INTENSITY_UPDATE && SHApp.Light_Mode=='A'){
+			LCD_WriteNumberXY(DISP_LIGHT_INTENSITY_L,DISP_LIGHT_INTENSITY_C,SHApp.LDR_Intensity);
+		}
+	if(ebBits&E_LIGHT_INTENSITY_UPDATE && SHApp.Light_Mode=='M'){
+			LCD_WriteNumberXY(DISP_LIGHT_INTENSITY_L,DISP_LIGHT_INTENSITY_C,SHApp.Light_Intensity);
+		}
+	if(ebBits&E_CTEMP_UPDATE){
+			LCD_WriteNumberXY(DISP_CTEMP_L,DISP_CTEMP_C,SHApp.CTemp);
+		}
+	if(ebBits&E_ACTEMP_UPDATE){
+			LCD_WriteNumberXY(DISP_ACTEMP_L,DISP_ACTEMP_C,SHApp.ACTemp);
+		}
+	if(ebBits&E_ALARM_STATUS_UPDATE){
+			LCD_WriteCharXY(DISP_ALARM_STATUS_L,DISP_ALARM_STATUS_C,SHApp.Alarm_Status);
+		}
+	if((ebBits&E_INSERT_DIGIT_DISP) && (SHApp.System_State==SS_PW_CHECK || SHApp.system_states==SS_PW_MISS||SHApp.System_State==SS_LOCK_CONFIG){
+			LCD_WritecharXY(DISP_PW_L, (DISP_PW_C + digitCounter+1),'*');
+		}
+	if((ebBits&E_INSERT_DIGIT_DISP) && (SHApp.System_State==SS_LIGHT_CONFIG)){
+			LCD_WriteCharXY(DISP_INSERT_LIGHT_INTISITY_L, (DISP_INSERT_LIGHT_INTISITY_C + digitCounter), digitvalue);
+		}
+	if((ebBits&E_INSERT_DIGIT_DISP) && (SHApp.System_State==SS_ACTEMP_CONFIG)){
+			LCD_WriteCharXY(DISP_INSERT_ACTEMP_L, (DISP_INSERT_ACTEMP_C + digitCounter), digitvalue);
+		}
+   
+
+
+
